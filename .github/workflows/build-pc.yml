@@ -1,0 +1,53 @@
+name: Build DZ Mirror Pro (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Auto-unpack ZIP if uploaded directly
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path . -Filter "DZMirrorPC*.zip" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($zip) {
+            Expand-Archive -Path $zip.FullName -DestinationPath _unpack_tmp -Force
+            $src = if (Test-Path "_unpack_tmp/DZMirrorPC") { "_unpack_tmp/DZMirrorPC" } else { "_unpack_tmp" }
+            Copy-Item -Path "$src\*" -Destination "." -Recurse -Force
+            Remove-Item _unpack_tmp -Recurse -Force
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download Scrcpy & ADB binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/Genymobile/scrcpy/releases/latest"
+          $asset = $rel.assets | Where-Object { $_.name -match "scrcpy-win64.*\.zip$" } | Select-Object -First 1
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile scrcpy.zip
+          Expand-Archive -Path scrcpy.zip -DestinationPath scrcpy_tmp -Force
+          $inner = Get-ChildItem -Path scrcpy_tmp -Directory | Select-Object -First 1
+          Copy-Item -Path "$($inner.FullName)\*" -Destination "bin\" -Recurse -Force
+          Remove-Item scrcpy.zip, scrcpy_tmp -Recurse -Force
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows Installer (.exe)
+        run: npm run dist
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DZMirror-Pro-Windows-Setup
+          path: dist/*.exe
