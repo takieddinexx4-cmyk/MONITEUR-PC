@@ -1,0 +1,10 @@
+- name: Auto-unpack ZIP if uploaded directly
+  shell: pwsh
+  run: |
+    $zip = Get-ChildItem -Path . -Filter "DZMirrorPC*.zip" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($zip) {
+      Expand-Archive -Path $zip.FullName -DestinationPath _unpack_tmp -Force
+      $src = if (Test-Path "_unpack_tmp/DZMirrorPC") { "_unpack_tmp/DZMirrorPC" } else { "_unpack_tmp" }
+      Copy-Item -Path "$src\*" -Destination "." -Recurse -Force
+      Remove-Item _unpack_tmp -Recurse -Force
+    }
